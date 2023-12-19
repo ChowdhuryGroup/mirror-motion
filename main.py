@@ -5,12 +5,35 @@ thetas = [0.0, 0.0]  # horizontal mirror angles
 phis = [0.0, 0.0]  # vertical mirror angles
 
 
+class Vector:
+    def __init__(self, components: tuple[float, float, float]):
+        self._components = np.array(object=components, dtype=float)
+        self._norm = float(np.linalg.norm(self.components))
+
+    @property
+    def components(self):
+        return self._components
+
+    @property
+    def norm(self) -> float:
+        return self._norm
+
+    def __truediv__(self, divisor: float):
+        new_components = self.components / divisor
+        return Vector((new_components[0], new_components[1], new_components[2]))
+
+    def __sub__(self, subtrahend):
+        new_components = self.components - subtrahend.components
+        return Vector((new_components[0], new_components[1], new_components[2]))
+
+    def dot(self, other):
+        return self.components.dot(other.components)
+
+
 class Ray:
-    def __init__(self, source: np.ndarray, direction: np.ndarray):
+    def __init__(self, source: Vector, direction: Vector):
         self._source = source
-        if direction.shape != (3,):
-            raise ValueError("Source needs to be a 3D point")
-        self._direction = direction / np.linalg.norm(direction)
+        self._direction = direction / direction.norm
 
     @property
     def source(self):
@@ -22,7 +45,7 @@ class Ray:
 
 
 class Line:
-    def __init__(self, start: np.ndarray, end: np.ndarray):
+    def __init__(self, start: Vector, end: Vector):
         self._start = start
         self._end = end
 
@@ -37,7 +60,7 @@ class Line:
     @property
     def length(self):
         if self._length == None:
-            self._length = np.linalg.norm(self.end - self.start)
+            self._length = (self.end - self.start).norm
         return self._length
 
 
@@ -54,12 +77,30 @@ class Plane:
             raise ValueError("Point needs to be a 3D point")
         self._origin_distance = -self._normal_vector.dot(point)
 
+    @property
+    def normal_vector(self):
+        return self._normal_vector
 
-def ray_plane_intersection(ray: Ray, plane: Plane):
-    return ray.source
+
+def ray_plane_intersection(ray: Ray, plane: Plane) -> Vector:
+    return ray.source + ray.direction * (
+        plane._origin_distance - ray.source.dot(plane.normal_vector)
+    )
 
 
-initial_ray = Ray(np.array((0.0, 0.0, 0.0)), np.array((1.0, 0.0, 0.0)))
+def reflect_ray(ray: Ray, plane: Plane) -> tuple[Line, Ray]:
+    intersection = ray_plane_intersection(ray, plane)
+    new_direction = (
+        ray.direction
+        - 2.0 * ray.direction.dot(plane.normal_vector) * plane.normal_vector
+    )
+    new_ray = Ray(intersection, new_direction)
+    old_line_segment = Line(ray.source, intersection)
+
+    return old_line_segment, new_ray
+
+
+initial_ray = Ray(Vector((0.0, 0.0, 0.0)), Vector((1.0, 0.0, 0.0)))
 
 
 mirror_spacing = 1.0
@@ -67,32 +108,15 @@ mirror_spacing = 1.0
 # Manual calc
 distance_along_second_mirror = (
     mirror_spacing
-    * sympy.sin(2.0 * thetas[0])
-    / sympy.sin(sympy.pi / 4.0 - 2 * thetas[0] + phis[0])
+    * np.sin(2.0 * thetas[0])
+    / np.sin(np.pi / 4.0 - 2 * thetas[0] + phis[0])
 )
-horizontal_displacement = distance_along_second_mirror / sympy.sin(
-    sympy.pi / 4.0 + phis[0]
-)
+horizontal_displacement = distance_along_second_mirror / np.sin(np.pi / 4.0 + phis[0])
 
 
-def mirror_reflect_ray(ray: sympy.Ray3D, mirror: sympy.Plane):
-    initial_direction = ray.direction_cosine
-    print(mirror.equation().as_coefficients_dict())
-    normal = sympy.vector.Vector(mirror.normal)
-    input("wtf")
-    normalized_normal = normal.normalize()
-    input("brah")
-    exit_direction = (
-        initial_direction
-        - 2 * (initial_direction.dot(normalized_normal)) * normalized_normal
-    )
-    intersection_point = ray.intersection(mirror)
-    return sympy.Ray3D(intersection_point, exit_direction)
-
-
-# Sympy vector calc
-first_mirror_center = sympy.Point(1.0, 0.0, 0.0)
-first_mirror = sympy.Plane(first_mirror_center, normal_vector=(-1, 1, 0))
+# Vector calc
+initial_ray = Ray(Vector((0.0, 0.0, 0.0)), Vector((1.0, 0.0, 0.0)))
+first_mirror = Plane(np.array((2.0, 0.0, 0.0)), direction=np.array((-1, 1, 0)))
 first_mirror_intersection = initial_ray.intersection(first_mirror)
 print(first_mirror_intersection)
 
